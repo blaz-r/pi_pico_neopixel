@@ -1,8 +1,7 @@
 # pi_pico_neopixel
 a library for using ws2812b and sk6812 leds (aka neopixels) with Raspberry Pi Pico
 
-![example] (
-    https://github.com/blaz-r/pi_pico_neopixel/pico_rgbw_rgb.jpg)
+![example](https://github.com/blaz-r/pi_pico_neopixel/blob/main/pico_rgbw_rgb.jpg)
 
 You'll first need to save the neopixel.py file to your device (for example, open it in Thonny and go file > save as and select MicroPython device. Give it the same name). Once it's there, you can import it into your code. 
 
