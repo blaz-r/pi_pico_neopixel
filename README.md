@@ -13,7 +13,7 @@ from neopixel import Neopixel
 pixels = Neopixel(10, 0, 0, "RGBW")
 ```
 
-Mind that you can use whichever order of RGB / RGBW you want (GRB, WRGB, GRB, RGWB ...). This only represents order of data sent to led-strip, all functions still work with RGBW order. Exact order of leds should be on package of your led-strip. (My BTF-lights sk6812 has GRBW)
+Mind that you can use whichever order of RGB / RGBW you want (GRB, WRGB, GRB, RGWB ...). This only represents order of data sent to led-strip, all functions still work with RGBW order. Exact order of leds should be on package of your led-strip. (My BTF-lights sk6812 has GRBW).
 
 This class has many methods, two main ones being show() which sends the data to the strip, and set_pixel which sets the color values for a particular LED. The parameters are LED number and a tuple of form (red, green blue) or (red, green, blue, white) with the colors taking values between 0 and 255.
 

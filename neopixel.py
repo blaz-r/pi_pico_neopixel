@@ -47,12 +47,13 @@ def sk6812():
 # Same hold for every other index (and - 1 at the end for 3 letter strings).
 
 class Neopixel:
-    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.001):
+    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0001):
         self.pixels = array.array("I", [0 for _ in range(num_leds)])
-        self.mode = set(mode)       # set for better performance
+        self.mode = set(mode)   # set for better performance
         if 'W' in self.mode:
             # RGBW uses different PIO state machine configuration
             self.sm = rp2.StateMachine(state_machine, sk6812, freq=8000000, sideset_base=Pin(pin))
+            # dictionary of values required to shift bit into position (check class desc.)
             self.shift = {'R': (mode.index('R') ^ 3) * 8, 'G': (mode.index('G') ^ 3) * 8,
                           'B': (mode.index('B') ^ 3) * 8, 'W': (mode.index('W') ^ 3) * 8}
         else:
@@ -69,9 +70,9 @@ class Neopixel:
         if brightness == None:
             return self.brightnessvalue
         else:
-            if (brightness < 1):
+            if brightness < 1:
                 brightness = 1
-        if (brightness > 255):
+        if brightness > 255:
             brightness = 255
         self.brightnessvalue = brightness
 
@@ -102,7 +103,7 @@ class Neopixel:
             self.set_pixel(i, rgb_w)
 
     # Set red, green and blue value of pixel on position <pixel_num>
-    # Function accepts (r, g, b) tuple or individual rgb values3
+    # Function accepts (r, g, b) / (r, g, b, w) tuple
     def set_pixel(self, pixel_num, rgb_w):
         pos = self.shift
 
@@ -131,7 +132,7 @@ class Neopixel:
 
     # Update pixels
     def show(self):
-        # if we use only RGB, we cut 8 bits of, otherwise we keep all 32
+        # If mode is RGB, we cut 8 bits of, otherwise we keep all 32
         cut = 8
         if 'W' in self.mode:
             cut = 0
