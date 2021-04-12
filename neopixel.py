@@ -33,18 +33,32 @@ def sk6812():
     wrap()
 
 
-# delay here is the reset time. You need a pause to reset the LED strip back to the initial LED
+# Delay here is the reset time. You need a pause to reset the LED strip back to the initial LED
 # however, if you have quite a bit of processing to do before the next time you update the strip
 # you could put in delay=0 (or a lower delay)
-class neopixel:
-    def __init__(self, num_leds, state_machine, pin, mode="RGB",  delay=0.001):
+#
+# Class supports different order of individual colors (GRB, RGB, WRGB, GWRB ...). In order to achieve
+# this, we need to flip the indexes: in 'RGBW', 'R' is on index 0, but we need to shift it left by 3 * 8bits,
+# so in it's inverse, 'WBGR', it has exactly right index. Since micropython doesn't have [::-1] and recursive rev()
+# isn't too efficient we simply do that by XORing (operand ^) each index with 3 (0b11) to make this flip.
+# When dealing with just 'RGB' (3 letter string), this means same but reduced by 1 after XOR!.
+# Example: in 'GRBW' we want final form of 0bGGRRBBWW, meaning G with index 0 needs to be shifted 3 * 8bit ->
+# 'G' on index 0: 0b00 ^ 0b11 -> 0b11 (3), just as we wanted.
+# Same hold for every other index (and - 1 at the end for 3 letter strings).
+
+class Neopixel:
+    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.001):
         self.pixels = array.array("I", [0 for _ in range(num_leds)])
-        self.mode = set(mode)
-        # RGBW uses different PIO state machine configuration
+        self.mode = set(mode)       # set for better performance
         if 'W' in self.mode:
+            # RGBW uses different PIO state machine configuration
             self.sm = rp2.StateMachine(state_machine, sk6812, freq=8000000, sideset_base=Pin(pin))
+            self.shift = {'R': (mode.index('R') ^ 3) * 8, 'G': (mode.index('G') ^ 3) * 8,
+                          'B': (mode.index('B') ^ 3) * 8, 'W': (mode.index('W') ^ 3) * 8}
         else:
             self.sm = rp2.StateMachine(state_machine, ws2812, freq=8000000, sideset_base=Pin(pin))
+            self.shift = {'R': ((mode.index('R') ^ 3) - 1) * 8, 'G': ((mode.index('G') ^ 3) - 1) * 8,
+                          'B': ((mode.index('B') ^ 3) - 1) * 8, 'W': 0}
         self.sm.active(1)
         self.num_leds = num_leds
         self.delay = delay
@@ -90,17 +104,17 @@ class neopixel:
     # Set red, green and blue value of pixel on position <pixel_num>
     # Function accepts (r, g, b) tuple or individual rgb values3
     def set_pixel(self, pixel_num, rgb_w):
+        pos = self.shift
 
         red = round(rgb_w[0] * (self.brightness() / 255))
         green = round(rgb_w[1] * (self.brightness() / 255))
         blue = round(rgb_w[2] * (self.brightness() / 255))
+        white = 0
         # if it's (r, g, b, w)
         if len(rgb_w) == 4 and 'W' in self.mode:
             white = round(rgb_w[3] * (self.brightness() / 255))
-            # bits are of form 0bGGRRBBWW
-            self.pixels[pixel_num] = green << 24 | red << 16 | blue << 8 | white
-        else:
-            self.pixels[pixel_num] = green << 16 | red << 8 | blue
+
+        self.pixels[pixel_num] = white << pos['W'] | blue << pos['B'] | red << pos['R'] | green << pos['G']
 
     # Rotate <num_of_pixels> pixels to the left
     def rotate_left(self, num_of_pixels):

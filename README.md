@@ -35,4 +35,4 @@ For new settings to take effect you write:
 pixels.show()
 ```
 
-Library is extended verison of https://github.com/blaz-r/pico_python_ws2812b, originaly forked from https://github.com/benevpi/pico_python_ws2812b.
+Library is extended verison of https://github.com/blaz-r/pico_python_ws2812b, originally forked from https://github.com/benevpi/pico_python_ws2812b.

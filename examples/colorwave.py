@@ -2,10 +2,10 @@
 # simplify working with gradients
 
 import time
-from neopixel import neopixel
+from neopixel import Neopixel
 
 numpix = 60
-strip = neopixel(numpix, 1, 1, "RGB")
+strip = Neopixel(numpix, 1, 1, "GRB")
 
 red = (255, 0, 0)
 orange = (255, 50, 0)

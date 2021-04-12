@@ -1,8 +1,8 @@
 import time
-from neopixel import neopixel
+from neopixel import Neopixel
 
 numpix = 60
-strip = neopixel(numpix, 0, 0, "RGBW")
+strip = Neopixel(numpix, 0, 0, "RGBW")
 
 red = (255, 0, 0)
 orange = (255, 165, 0)
@@ -17,7 +17,7 @@ colors_rgb = (red, orange, yellow, green, blue, indigo, violet)
 colors_rgbw = [color+tuple([0]) for color in colors_rgb]
 colors_rgbw.append((0, 0, 0, 255))
 
-# uncomment colors_rgbw if you have RGBW strip
+# uncomment colors_rgb if you have RGB strip
 # colors = colors_rgb
 colors = colors_rgbw
 

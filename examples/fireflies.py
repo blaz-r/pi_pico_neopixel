@@ -1,10 +1,10 @@
 import time
-import neopixel
+from neopixel import Neopixel
 import random
 
 numpix = 60  # Number of NeoPixels
 # Pin where NeoPixels are connected
-strip = neopixel.neopixel(numpix, 0, 0, "RGBW")
+strip = Neopixel(numpix, 1, 1, "GRB")
 
 colors_rgb = [
     (232, 100, 255),  # Purple
@@ -19,8 +19,8 @@ colors_rgbw = [color+tuple([0]) for color in colors_rgb]
 colors_rgbw.append((0, 0, 0, 255))
 
 # uncomment colors_rgbw if you have RGBW strip
-# colors = colors_rgb
-colors = colors_rgbw
+colors = colors_rgb
+# colors = colors_rgbw
 
 max_len=20
 min_len = 5
