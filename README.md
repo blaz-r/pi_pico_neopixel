@@ -37,4 +37,13 @@ For new settings to take effect you write:
 pixels.show()
 ```
 
+Library also supports HSV colors. For example you can check [smoothRinbow.py](https://github.com/blaz-r/pi_pico_neopixel/blob/develop/examples/smoothRainbow.py) in examples folder. For more info about HSV colors you can check out [Adafruit NeoPixel library documentation](https://learn.adafruit.com/adafruit-neopixel-uberguide/arduino-library-use) and scroll down to HSV section.
+To use HSV colors, call colorHSV(hue, sat, val) function with hue, saturation and value as parameters. The function returns rgb tuple that you can then use in all other functions.
+
+```
+color = strip.colorHSV(32000, 255, 200)
+strip.fill(color)
+strip.show()
+```
+
 Library is extended verison of https://github.com/blaz-r/pico_python_ws2812b, originally forked from https://github.com/benevpi/pico_python_ws2812b.
