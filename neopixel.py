@@ -123,6 +123,9 @@ class Neopixel:
     # https://github.com/adafruit/Adafruit_NeoPixel so all the credits for that
     # go directly to them (license: https://github.com/adafruit/Adafruit_NeoPixel/blob/master/COPYING)
     def colorHSV(self, hue, sat, val):
+        if hue >= 65536:
+            hue %= 65536
+
         hue = (hue * 1530 + 32768) // 65536
         if hue < 510:
             b = 0
