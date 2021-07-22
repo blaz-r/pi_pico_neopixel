@@ -40,7 +40,7 @@ def sk6812():
 # Class supports different order of individual colors (GRB, RGB, WRGB, GWRB ...). In order to achieve
 # this, we need to flip the indexes: in 'RGBW', 'R' is on index 0, but we need to shift it left by 3 * 8bits,
 # so in it's inverse, 'WBGR', it has exactly right index. Since micropython doesn't have [::-1] and recursive rev()
-# isn't too efficient we simply do that by XORing (operand ^) each index with 3 (0b11) to make this flip.
+# isn't too efficient we simply do that by XORing (operator ^) each index with 3 (0b11) to make this flip.
 # When dealing with just 'RGB' (3 letter string), this means same but reduced by 1 after XOR!.
 # Example: in 'GRBW' we want final form of 0bGGRRBBWW, meaning G with index 0 needs to be shifted 3 * 8bit ->
 # 'G' on index 0: 0b00 ^ 0b11 -> 0b11 (3), just as we wanted.
@@ -116,6 +116,56 @@ class Neopixel:
             white = round(rgb_w[3] * (self.brightness() / 255))
 
         self.pixels[pixel_num] = white << pos['W'] | blue << pos['B'] | red << pos['R'] | green << pos['G']
+
+    # Converts HSV color to rgb tuple and returns it
+    # Function accepts integer values for <hue>, <saturation> and <value>
+    # The logic is almost the same as in Adafruit NeoPixel library:
+    # https://github.com/adafruit/Adafruit_NeoPixel so all the credits for that
+    # go directly to them (license: https://github.com/adafruit/Adafruit_NeoPixel/blob/master/COPYING)
+    def colorHSV(self, hue, sat, val):
+        if hue >= 65536:
+            hue %= 65536
+
+        hue = (hue * 1530 + 32768) // 65536
+        if hue < 510:
+            b = 0
+            if hue < 255:
+                r = 255
+                g = hue
+            else:
+                r = 510 - hue
+                g = 255
+        elif hue < 1020:
+            r = 0
+            if hue < 765:
+                g = 255
+                b = hue - 510
+            else:
+                g = 1020 - hue
+                b = 255
+        elif hue < 1530:
+            g = 0
+            if hue < 1275:
+                r = hue - 1020
+                b = 255
+            else:
+                r = 255
+                b = 1530 - hue
+        else:
+            r = 255
+            g = 0
+            b = 0
+
+        v1 = 1 + val
+        s1 = 1 + sat
+        s2 = 255 - sat
+
+        r = ((((r * s1) >> 8) + s2) * v1) >> 8
+        g = ((((g * s1) >> 8) + s2) * v1) >> 8
+        b = ((((b * s1) >> 8) + s2) * v1) >> 8
+
+        return r, g, b
+
 
     # Rotate <num_of_pixels> pixels to the left
     def rotate_left(self, num_of_pixels):
