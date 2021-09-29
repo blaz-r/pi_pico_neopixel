@@ -43,11 +43,11 @@ For new settings to take effect you write:
 pixels.show()
 ```
 
-For more examples, check [examples folder](https://github.com/blaz-r/pi_pico_neopixel/tree/develop/examples).
+For more examples, check [examples folder](https://github.com/blaz-r/pi_pico_neopixel/tree/main/examples).
 
 ## HSV colors
 
-Library also supports HSV colors. For example you can look at [smoothRinbow.py](https://github.com/blaz-r/pi_pico_neopixel/blob/develop/examples/smoothRainbow.py).
+Library also supports HSV colors. For example you can look at [smoothRinbow.py](https://github.com/blaz-r/pi_pico_neopixel/blob/main/examples/smoothRainbow.py).
 To use HSV colors, call colorHSV(hue, sat, val) function with hue, saturation and value as parameters. The function returns rgb tuple that you can then use in all other functions.
 
 Hue should be between 0 and 65535. When it becomes larger it just rolls over (65536 -> 0). Saturation and value must be in range from 0 to 255. 255 saturation means just hue, and 255 value is maximum brightness. For more info about HSV colors you can check out [Adafruit NeoPixel library documentation](https://learn.adafruit.com/adafruit-neopixel-uberguide/arduino-library-use) and scroll down to HSV section.
