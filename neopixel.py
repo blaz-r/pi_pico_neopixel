@@ -78,7 +78,7 @@ class Neopixel:
 
     # Create a gradient with two RGB colors between "pixel1" and "pixel2" (inclusive)
     # Function accepts two (r, g, b) / (r, g, b, w) tuples
-    def set_pixel_line_gradient(self, pixel1, pixel2, left_rgb_w, right_rgb_w):
+    def set_pixel_line_gradient(self, pixel1, pixel2, left_rgb_w, right_rgb_w, how_bright = None):
         if pixel2 - pixel1 == 0:
             return
         right_pixel = max(pixel1, pixel2)
@@ -92,28 +92,30 @@ class Neopixel:
             # if it's (r, g, b, w)
             if len(left_rgb_w) == 4 and 'W' in self.mode:
                 white = round((right_rgb_w[3] - left_rgb_w[3]) * fraction + left_rgb_w[3])
-                self.set_pixel(left_pixel + i, (red, green, blue, white))
+                self.set_pixel(left_pixel + i, (red, green, blue, white), how_bright)
             else:
-                self.set_pixel(left_pixel + i, (red, green, blue))
+                self.set_pixel(left_pixel + i, (red, green, blue), how_bright)
 
     # Set an array of pixels starting from "pixel1" to "pixel2" (inclusive) to the desired color.
     # Function accepts (r, g, b) / (r, g, b, w) tuple
-    def set_pixel_line(self, pixel1, pixel2, rgb_w):
+    def set_pixel_line(self, pixel1, pixel2, rgb_w, how_bright = None):
         for i in range(pixel1, pixel2 + 1):
-            self.set_pixel(i, rgb_w)
+            self.set_pixel(i, rgb_w, how_bright)
 
     # Set red, green and blue value of pixel on position <pixel_num>
     # Function accepts (r, g, b) / (r, g, b, w) tuple
-    def set_pixel(self, pixel_num, rgb_w):
+    def set_pixel(self, pixel_num, rgb_w, how_bright = None):
+        if how_bright == None:
+            how_bright = self.brightness()
         pos = self.shift
 
-        red = round(rgb_w[0] * (self.brightness() / 255))
-        green = round(rgb_w[1] * (self.brightness() / 255))
-        blue = round(rgb_w[2] * (self.brightness() / 255))
+        red = round(rgb_w[0] * (how_bright / 255))
+        green = round(rgb_w[1] * (how_bright / 255))
+        blue = round(rgb_w[2] * (how_bright / 255))
         white = 0
         # if it's (r, g, b, w)
         if len(rgb_w) == 4 and 'W' in self.mode:
-            white = round(rgb_w[3] * (self.brightness() / 255))
+            white = round(rgb_w[3] * (how_bright / 255))
 
         self.pixels[pixel_num] = white << pos['W'] | blue << pos['B'] | red << pos['R'] | green << pos['G']
 
@@ -192,9 +194,7 @@ class Neopixel:
 
     # Set all pixels to given rgb values
     # Function accepts (r, g, b) / (r, g, b, w)
-    def fill(self, rgb_w):
+    def fill(self, rgb_w, how_bright = None):
         for i in range(self.num_leds):
-            self.set_pixel(i, rgb_w)
+            self.set_pixel(i, rgb_w, how_bright)
         time.sleep(self.delay)
-
-
