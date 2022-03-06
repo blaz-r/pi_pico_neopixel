@@ -197,4 +197,7 @@ class Neopixel:
     def fill(self, rgb_w, how_bright = None):
         for i in range(self.num_leds):
             self.set_pixel(i, rgb_w, how_bright)
-        time.sleep(self.delay)
+
+    # Clear the strip
+    def clear(self):
+        self.pixels = array.array("I", [0 for _ in range(self.num_leds)])
