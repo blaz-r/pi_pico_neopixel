@@ -108,14 +108,15 @@ class Neopixel:
         if how_bright is None:
             how_bright = self.brightness()
         pos = self.shift
+        bratio = how_bright / 255.0
 
-        red = round(rgb_w[0] * (how_bright / 255))
-        green = round(rgb_w[1] * (how_bright / 255))
-        blue = round(rgb_w[2] * (how_bright / 255))
+        red = round(rgb_w[0] * bratio)
+        green = round(rgb_w[1] * bratio)
+        blue = round(rgb_w[2] * bratio)
         white = 0
         # if it's (r, g, b, w)
         if len(rgb_w) == 4 and 'W' in self.mode:
-            white = round(rgb_w[3] * (how_bright / 255))
+            white = round(rgb_w[3] * bratio)
 
         self.pixels[pixel_num] = white << pos['W'] | blue << pos['B'] | red << pos['R'] | green << pos['G']
 
