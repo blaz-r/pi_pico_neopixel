@@ -55,7 +55,7 @@ class Neopixel:
     #    'mode',       # mode 'RGB' etc
     #    'W_in_mode',  # bool: is 'W' in mode
     #    'sm',         # state machine
-    #    'shift',      # shift amount for each component : { 'R': shift_R, ... }
+    #    'shift',      # shift amount for each component, in a tuple for (R,B,G,W)
     #    'delay',      # delay amount
     #    'brightnessvalue', # brightness scale factor 1..255
     #]
@@ -67,13 +67,13 @@ class Neopixel:
         if self.W_in_mode:
             # RGBW uses different PIO state machine configuration
             self.sm = rp2.StateMachine(state_machine, sk6812, freq=8000000, sideset_base=Pin(pin))
-            # dictionary of values required to shift bit into position (check class desc.)
-            self.shift = {'R': (mode.index('R') ^ 3) * 8, 'G': (mode.index('G') ^ 3) * 8,
-                          'B': (mode.index('B') ^ 3) * 8, 'W': (mode.index('W') ^ 3) * 8}
+            # tuple of values required to shift bit into position (check class desc.)
+            self.shift = ((mode.index('R') ^ 3) * 8, (mode.index('G') ^ 3) * 8,
+                          (mode.index('B') ^ 3) * 8, (mode.index('W') ^ 3) * 8)
         else:
             self.sm = rp2.StateMachine(state_machine, ws2812, freq=8000000, sideset_base=Pin(pin))
-            self.shift = {'R': ((mode.index('R') ^ 3) - 1) * 8, 'G': ((mode.index('G') ^ 3) - 1) * 8,
-                          'B': ((mode.index('B') ^ 3) - 1) * 8, 'W': 0}
+            self.shift = (((mode.index('R') ^ 3) - 1) * 8, ((mode.index('G') ^ 3) - 1) * 8,
+                          ((mode.index('B') ^ 3) - 1) * 8, 0)
         self.sm.active(1)
         self.num_leds = num_leds
         self.delay = delay
@@ -121,7 +121,7 @@ class Neopixel:
     def set_pixel(self, pixel_num, rgb_w, how_bright = None):
         if how_bright is None:
             how_bright = self.brightness()
-        pos = self.shift
+        sh_R, sh_G, sh_B, sh_W = self.shift
         bratio = how_bright / 255.0
 
         red = round(rgb_w[0] * bratio)
@@ -132,7 +132,7 @@ class Neopixel:
         if len(rgb_w) == 4 and self.W_in_mode:
             white = round(rgb_w[3] * bratio)
 
-        self.pixels[pixel_num] = white << pos['W'] | blue << pos['B'] | red << pos['R'] | green << pos['G']
+        self.pixels[pixel_num] = white << sh_W | blue << sh_B | red << sh_R | green << sh_G
 
     # Converts HSV color to rgb tuple and returns it
     # Function accepts integer values for <hue>, <saturation> and <value>
