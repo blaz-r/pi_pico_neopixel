@@ -68,7 +68,7 @@ class Neopixel:
     #]
 
     def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0001):
-        self.pixels = array.array("I", [0 for _ in range(num_leds)])
+        self.pixels = array.array("I", [0] * num_leds)
         self.mode = mode
         self.W_in_mode = 'W' in mode
         if self.W_in_mode:
@@ -248,4 +248,5 @@ class Neopixel:
 
     # Clear the strip
     def clear(self):
-        self.pixels = array.array("I", [0 for _ in range(self.num_leds)])
+        self.pixels = array.array("I", [0] * self.num_leds)
+
