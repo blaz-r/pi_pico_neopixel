@@ -49,8 +49,9 @@ def sk6812():
 class Neopixel:
     def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0001):
         self.pixels = array.array("I", [0 for _ in range(num_leds)])
-        self.mode = set(mode)   # set for better performance
-        if 'W' in self.mode:
+        self.mode = mode
+        self.W_in_mode = 'W' in mode
+        if self.W_in_mode:
             # RGBW uses different PIO state machine configuration
             self.sm = rp2.StateMachine(state_machine, sk6812, freq=8000000, sideset_base=Pin(pin))
             # dictionary of values required to shift bit into position (check class desc.)
@@ -90,7 +91,7 @@ class Neopixel:
             green = round((right_rgb_w[1] - left_rgb_w[1]) * fraction + left_rgb_w[1])
             blue = round((right_rgb_w[2] - left_rgb_w[2]) * fraction + left_rgb_w[2])
             # if it's (r, g, b, w)
-            if len(left_rgb_w) == 4 and 'W' in self.mode:
+            if len(left_rgb_w) == 4 and self.W_in_mode:
                 white = round((right_rgb_w[3] - left_rgb_w[3]) * fraction + left_rgb_w[3])
                 self.set_pixel(left_pixel + i, (red, green, blue, white), how_bright)
             else:
@@ -115,7 +116,7 @@ class Neopixel:
         blue = round(rgb_w[2] * bratio)
         white = 0
         # if it's (r, g, b, w)
-        if len(rgb_w) == 4 and 'W' in self.mode:
+        if len(rgb_w) == 4 and self.W_in_mode:
             white = round(rgb_w[3] * bratio)
 
         self.pixels[pixel_num] = white << pos['W'] | blue << pos['B'] | red << pos['R'] | green << pos['G']
@@ -187,7 +188,7 @@ class Neopixel:
     def show(self):
         # If mode is RGB, we cut 8 bits of, otherwise we keep all 32
         cut = 8
-        if 'W' in self.mode:
+        if self.W_in_mode:
             cut = 0
         for i in range(self.num_leds):
             self.sm.put(self.pixels[i], cut)
