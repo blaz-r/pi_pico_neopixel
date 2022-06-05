@@ -67,7 +67,7 @@ class Neopixel:
 
     # Set the overal value to adjust brightness when updating leds
     def brightness(self, brightness=None):
-        if brightness == None:
+        if brightness is None:
             return self.brightnessvalue
         else:
             if brightness < 1:
@@ -105,7 +105,7 @@ class Neopixel:
     # Set red, green and blue value of pixel on position <pixel_num>
     # Function accepts (r, g, b) / (r, g, b, w) tuple
     def set_pixel(self, pixel_num, rgb_w, how_bright = None):
-        if how_bright == None:
+        if how_bright is None:
             how_bright = self.brightness()
         pos = self.shift
 
@@ -170,14 +170,14 @@ class Neopixel:
 
 
     # Rotate <num_of_pixels> pixels to the left
-    def rotate_left(self, num_of_pixels):
-        if num_of_pixels == None:
+    def rotate_left(self, num_of_pixels = None):
+        if num_of_pixels is None:
             num_of_pixels = 1
         self.pixels = self.pixels[num_of_pixels:] + self.pixels[:num_of_pixels]
 
     # Rotate <num_of_pixels> pixels to the right
-    def rotate_right(self, num_of_pixels):
-        if num_of_pixels == None:
+    def rotate_right(self, num_of_pixels = None):
+        if num_of_pixels is None:
             num_of_pixels = 1
         num_of_pixels = -1 * num_of_pixels
         self.pixels = self.pixels[num_of_pixels:] + self.pixels[:num_of_pixels]
