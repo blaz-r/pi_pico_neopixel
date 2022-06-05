@@ -105,14 +105,21 @@ class Neopixel:
         right_pixel = max(pixel1, pixel2)
         left_pixel = min(pixel1, pixel2)
 
+        with_W = len(left_rgb_w) == 4 and self.W_in_mode
+        r_diff = right_rgb_w[0] - left_rgb_w[0]
+        g_diff = right_rgb_w[1] - left_rgb_w[1]
+        b_diff = right_rgb_w[2] - left_rgb_w[2]
+        if with_W:
+            w_diff = (right_rgb_w[3] - left_rgb_w[3])
+
         for i in range(right_pixel - left_pixel + 1):
             fraction = i / (right_pixel - left_pixel)
-            red = round((right_rgb_w[0] - left_rgb_w[0]) * fraction + left_rgb_w[0])
-            green = round((right_rgb_w[1] - left_rgb_w[1]) * fraction + left_rgb_w[1])
-            blue = round((right_rgb_w[2] - left_rgb_w[2]) * fraction + left_rgb_w[2])
+            red = round(r_diff * fraction + left_rgb_w[0])
+            green = round(g_diff * fraction + left_rgb_w[1])
+            blue = round(b_diff * fraction + left_rgb_w[2])
             # if it's (r, g, b, w)
-            if len(left_rgb_w) == 4 and self.W_in_mode:
-                white = round((right_rgb_w[3] - left_rgb_w[3]) * fraction + left_rgb_w[3])
+            if with_W:
+                white = round(w_diff * fraction + left_rgb_w[3])
                 self.set_pixel(left_pixel + i, (red, green, blue, white), how_bright)
             else:
                 self.set_pixel(left_pixel + i, (red, green, blue), how_bright)
