@@ -47,6 +47,19 @@ def sk6812():
 # Same hold for every other index (and - 1 at the end for 3 letter strings).
 
 class Neopixel:
+    # Micropython doesn't implement __slots__, but it's good to have a place
+    # to describe the data members...
+    #__slots__ = [
+    #    'num_leds',   # number of LEDs
+    #    'pixels',     # array.array('I') of raw data for LEDs
+    #    'mode',       # mode 'RGB' etc
+    #    'W_in_mode',  # bool: is 'W' in mode
+    #    'sm',         # state machine
+    #    'shift',      # shift amount for each component : { 'R': shift_R, ... }
+    #    'delay',      # delay amount
+    #    'brightnessvalue', # brightness scale factor 1..255
+    #]
+
     def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0001):
         self.pixels = array.array("I", [0 for _ in range(num_leds)])
         self.mode = mode
