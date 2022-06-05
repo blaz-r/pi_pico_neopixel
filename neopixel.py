@@ -236,8 +236,9 @@ class Neopixel:
         cut = 8
         if self.W_in_mode:
             cut = 0
-        for i in range(self.num_leds):
-            self.sm.put(self.pixels[i], cut)
+        sm_put = self.sm.put
+        for pixval in self.pixels:
+            sm_put(pixval, cut)
         time.sleep(self.delay)
 
     # Set all pixels to given rgb values
