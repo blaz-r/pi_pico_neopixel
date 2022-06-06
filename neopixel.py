@@ -32,6 +32,13 @@ def sk6812():
     nop()                   .side(0)    [T2 - 1]
     wrap()
 
+# we need this because Micropython can't construct slice objects directly, only by
+# way of supporting slice notation.
+# So, e.g. slice_maker[1::4] gives a slice(1,None,4) object.
+class slice_maker_class:
+    def __getitem__(self,slc):
+        return slc
+slice_maker = slice_maker_class()
 
 # Delay here is the reset time. You need a pause to reset the LED strip back to the initial LED
 # however, if you have quite a bit of processing to do before the next time you update the strip
@@ -113,11 +120,14 @@ class Neopixel:
     # Set an array of pixels starting from "pixel1" to "pixel2" (inclusive) to the desired color.
     # Function accepts (r, g, b) / (r, g, b, w) tuple
     def set_pixel_line(self, pixel1, pixel2, rgb_w, how_bright = None):
-        for i in range(pixel1, pixel2 + 1):
-            self.set_pixel(i, rgb_w, how_bright)
+        if pixel2 >= pixel1:
+            self.set_pixel(slice_maker[pixel1:pixel2 + 1], rgb_w, how_bright)
 
     # Set red, green and blue value of pixel on position <pixel_num>
     # Function accepts (r, g, b) / (r, g, b, w) tuple
+    # pixel_num may be a 'slice' object, and then the operation is applied
+    # to all pixels implied by the slice (most useful when called via
+    # __setitem__)
     def set_pixel(self, pixel_num, rgb_w, how_bright = None):
         if how_bright is None:
             how_bright = self.brightness()
@@ -132,7 +142,23 @@ class Neopixel:
         if len(rgb_w) == 4 and self.W_in_mode:
             white = round(rgb_w[3] * bratio)
 
-        self.pixels[pixel_num] = white << sh_W | blue << sh_B | red << sh_R | green << sh_G
+        pix_value = white << sh_W | blue << sh_B | red << sh_R | green << sh_G
+        # set some subset, if pixel_num is a slice:
+        if type(pixel_num) is slice:
+            for i in range(*pixel_num.indices(self.num_leds)):
+                self.pixels[i] = pix_value
+        else:
+            self.pixels[pixel_num] = pix_value
+
+    # if npix is a Neopixel object,
+    # npix[10] = (0,255,0)    # <- sets #10 to green
+    # npix[15:21] = (255,0,0) # <- sets 16,17 .. 20 to red
+    # npix[21:29:2] = (0,0,255) # <- sets 21,23,25,27 to blue
+    # npix[1::2] = (0,0,0) # <- sets all odd pixels to 'off'
+    # (the 'slice' cases pass idx as a 'slice' object, and
+    # set_pixel processes the slice)
+    def __setitem__(self, idx, rgb_w):
+        self.set_pixel(idx,rgb_w)
 
     # Converts HSV color to rgb tuple and returns it
     # Function accepts integer values for <hue>, <saturation> and <value>
@@ -210,8 +236,8 @@ class Neopixel:
     # Set all pixels to given rgb values
     # Function accepts (r, g, b) / (r, g, b, w)
     def fill(self, rgb_w, how_bright = None):
-        for i in range(self.num_leds):
-            self.set_pixel(i, rgb_w, how_bright)
+        # set_pixel over all leds.
+        self.set_pixel(slice_maker[:], rgb_w, how_bright)
 
     # Clear the strip
     def clear(self):
