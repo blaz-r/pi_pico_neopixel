@@ -32,6 +32,13 @@ def sk6812():
     nop()                   .side(0)    [T2 - 1]
     wrap()
 
+# we need this because Micropython can't construct slice objects directly, only by
+# way of supporting slice notation.
+# So, e.g. slice_maker[1::4] gives a slice(1,None,4) object.
+class slice_maker_class:
+    def __getitem__(self,slc):
+        return slc
+slice_maker = slice_maker_class()
 
 # Delay here is the reset time. You need a pause to reset the LED strip back to the initial LED
 # however, if you have quite a bit of processing to do before the next time you update the strip
@@ -47,19 +54,33 @@ def sk6812():
 # Same hold for every other index (and - 1 at the end for 3 letter strings).
 
 class Neopixel:
+    # Micropython doesn't implement __slots__, but it's good to have a place
+    # to describe the data members...
+    #__slots__ = [
+    #    'num_leds',   # number of LEDs
+    #    'pixels',     # array.array('I') of raw data for LEDs
+    #    'mode',       # mode 'RGB' etc
+    #    'W_in_mode',  # bool: is 'W' in mode
+    #    'sm',         # state machine
+    #    'shift',      # shift amount for each component, in a tuple for (R,B,G,W)
+    #    'delay',      # delay amount
+    #    'brightnessvalue', # brightness scale factor 1..255
+    #]
+
     def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0001):
-        self.pixels = array.array("I", [0 for _ in range(num_leds)])
-        self.mode = set(mode)   # set for better performance
-        if 'W' in self.mode:
+        self.pixels = array.array("I", [0] * num_leds)
+        self.mode = mode
+        self.W_in_mode = 'W' in mode
+        if self.W_in_mode:
             # RGBW uses different PIO state machine configuration
             self.sm = rp2.StateMachine(state_machine, sk6812, freq=8000000, sideset_base=Pin(pin))
-            # dictionary of values required to shift bit into position (check class desc.)
-            self.shift = {'R': (mode.index('R') ^ 3) * 8, 'G': (mode.index('G') ^ 3) * 8,
-                          'B': (mode.index('B') ^ 3) * 8, 'W': (mode.index('W') ^ 3) * 8}
+            # tuple of values required to shift bit into position (check class desc.)
+            self.shift = ((mode.index('R') ^ 3) * 8, (mode.index('G') ^ 3) * 8,
+                          (mode.index('B') ^ 3) * 8, (mode.index('W') ^ 3) * 8)
         else:
             self.sm = rp2.StateMachine(state_machine, ws2812, freq=8000000, sideset_base=Pin(pin))
-            self.shift = {'R': ((mode.index('R') ^ 3) - 1) * 8, 'G': ((mode.index('G') ^ 3) - 1) * 8,
-                          'B': ((mode.index('B') ^ 3) - 1) * 8, 'W': 0}
+            self.shift = (((mode.index('R') ^ 3) - 1) * 8, ((mode.index('G') ^ 3) - 1) * 8,
+                          ((mode.index('B') ^ 3) - 1) * 8, 0)
         self.sm.active(1)
         self.num_leds = num_leds
         self.delay = delay
@@ -67,7 +88,7 @@ class Neopixel:
 
     # Set the overal value to adjust brightness when updating leds
     def brightness(self, brightness=None):
-        if brightness == None:
+        if brightness is None:
             return self.brightnessvalue
         else:
             if brightness < 1:
@@ -84,14 +105,21 @@ class Neopixel:
         right_pixel = max(pixel1, pixel2)
         left_pixel = min(pixel1, pixel2)
 
+        with_W = len(left_rgb_w) == 4 and self.W_in_mode
+        r_diff = right_rgb_w[0] - left_rgb_w[0]
+        g_diff = right_rgb_w[1] - left_rgb_w[1]
+        b_diff = right_rgb_w[2] - left_rgb_w[2]
+        if with_W:
+            w_diff = (right_rgb_w[3] - left_rgb_w[3])
+
         for i in range(right_pixel - left_pixel + 1):
             fraction = i / (right_pixel - left_pixel)
-            red = round((right_rgb_w[0] - left_rgb_w[0]) * fraction + left_rgb_w[0])
-            green = round((right_rgb_w[1] - left_rgb_w[1]) * fraction + left_rgb_w[1])
-            blue = round((right_rgb_w[2] - left_rgb_w[2]) * fraction + left_rgb_w[2])
+            red = round(r_diff * fraction + left_rgb_w[0])
+            green = round(g_diff * fraction + left_rgb_w[1])
+            blue = round(b_diff * fraction + left_rgb_w[2])
             # if it's (r, g, b, w)
-            if len(left_rgb_w) == 4 and 'W' in self.mode:
-                white = round((right_rgb_w[3] - left_rgb_w[3]) * fraction + left_rgb_w[3])
+            if with_W:
+                white = round(w_diff * fraction + left_rgb_w[3])
                 self.set_pixel(left_pixel + i, (red, green, blue, white), how_bright)
             else:
                 self.set_pixel(left_pixel + i, (red, green, blue), how_bright)
@@ -99,25 +127,45 @@ class Neopixel:
     # Set an array of pixels starting from "pixel1" to "pixel2" (inclusive) to the desired color.
     # Function accepts (r, g, b) / (r, g, b, w) tuple
     def set_pixel_line(self, pixel1, pixel2, rgb_w, how_bright = None):
-        for i in range(pixel1, pixel2 + 1):
-            self.set_pixel(i, rgb_w, how_bright)
+        if pixel2 >= pixel1:
+            self.set_pixel(slice_maker[pixel1:pixel2 + 1], rgb_w, how_bright)
 
     # Set red, green and blue value of pixel on position <pixel_num>
     # Function accepts (r, g, b) / (r, g, b, w) tuple
+    # pixel_num may be a 'slice' object, and then the operation is applied
+    # to all pixels implied by the slice (most useful when called via
+    # __setitem__)
     def set_pixel(self, pixel_num, rgb_w, how_bright = None):
-        if how_bright == None:
+        if how_bright is None:
             how_bright = self.brightness()
-        pos = self.shift
+        sh_R, sh_G, sh_B, sh_W = self.shift
+        bratio = how_bright / 255.0
 
-        red = round(rgb_w[0] * (how_bright / 255))
-        green = round(rgb_w[1] * (how_bright / 255))
-        blue = round(rgb_w[2] * (how_bright / 255))
+        red = round(rgb_w[0] * bratio)
+        green = round(rgb_w[1] * bratio)
+        blue = round(rgb_w[2] * bratio)
         white = 0
         # if it's (r, g, b, w)
-        if len(rgb_w) == 4 and 'W' in self.mode:
-            white = round(rgb_w[3] * (how_bright / 255))
+        if len(rgb_w) == 4 and self.W_in_mode:
+            white = round(rgb_w[3] * bratio)
 
-        self.pixels[pixel_num] = white << pos['W'] | blue << pos['B'] | red << pos['R'] | green << pos['G']
+        pix_value = white << sh_W | blue << sh_B | red << sh_R | green << sh_G
+        # set some subset, if pixel_num is a slice:
+        if type(pixel_num) is slice:
+            for i in range(*pixel_num.indices(self.num_leds)):
+                self.pixels[i] = pix_value
+        else:
+            self.pixels[pixel_num] = pix_value
+
+    # if npix is a Neopixel object,
+    # npix[10] = (0,255,0)    # <- sets #10 to green
+    # npix[15:21] = (255,0,0) # <- sets 16,17 .. 20 to red
+    # npix[21:29:2] = (0,0,255) # <- sets 21,23,25,27 to blue
+    # npix[1::2] = (0,0,0) # <- sets all odd pixels to 'off'
+    # (the 'slice' cases pass idx as a 'slice' object, and
+    # set_pixel processes the slice)
+    def __setitem__(self, idx, rgb_w):
+        self.set_pixel(idx,rgb_w)
 
     # Converts HSV color to rgb tuple and returns it
     # Function accepts integer values for <hue>, <saturation> and <value>
@@ -170,14 +218,14 @@ class Neopixel:
 
 
     # Rotate <num_of_pixels> pixels to the left
-    def rotate_left(self, num_of_pixels):
-        if num_of_pixels == None:
+    def rotate_left(self, num_of_pixels = None):
+        if num_of_pixels is None:
             num_of_pixels = 1
         self.pixels = self.pixels[num_of_pixels:] + self.pixels[:num_of_pixels]
 
     # Rotate <num_of_pixels> pixels to the right
-    def rotate_right(self, num_of_pixels):
-        if num_of_pixels == None:
+    def rotate_right(self, num_of_pixels = None):
+        if num_of_pixels is None:
             num_of_pixels = 1
         num_of_pixels = -1 * num_of_pixels
         self.pixels = self.pixels[num_of_pixels:] + self.pixels[:num_of_pixels]
@@ -186,18 +234,20 @@ class Neopixel:
     def show(self):
         # If mode is RGB, we cut 8 bits of, otherwise we keep all 32
         cut = 8
-        if 'W' in self.mode:
+        if self.W_in_mode:
             cut = 0
-        for i in range(self.num_leds):
-            self.sm.put(self.pixels[i], cut)
+        sm_put = self.sm.put
+        for pixval in self.pixels:
+            sm_put(pixval, cut)
         time.sleep(self.delay)
 
     # Set all pixels to given rgb values
     # Function accepts (r, g, b) / (r, g, b, w)
     def fill(self, rgb_w, how_bright = None):
-        for i in range(self.num_leds):
-            self.set_pixel(i, rgb_w, how_bright)
+        # set_pixel over all leds.
+        self.set_pixel(slice_maker[:], rgb_w, how_bright)
 
     # Clear the strip
     def clear(self):
-        self.pixels = array.array("I", [0 for _ in range(self.num_leds)])
+        self.pixels = array.array("I", [0] * self.num_leds)
+
