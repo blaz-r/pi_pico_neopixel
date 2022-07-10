@@ -3,6 +3,10 @@ a library for using ws2812b and sk6812 leds (aka neopixels) with Raspberry Pi Pi
 
 ![example](https://github.com/blaz-r/pi_pico_neopixel/blob/main/pico_rgbw_rgb.jpg)
 
+### Detailed documentation can be found on [Wiki page](https://github.com/blaz-r/pi_pico_neopixel/wiki).
+
+## Quick start guide
+
 You'll first need to save the neopixel.py file to your device (for example, open it in Thonny and go file > save as and select MicroPython device. Give it the same name). Once it's there, you can import it into your code. 
 
 ## Initialization
@@ -43,7 +47,7 @@ For new settings to take effect you write:
 pixels.show()
 ```
 
-For more examples, check [examples folder](https://github.com/blaz-r/pi_pico_neopixel/tree/main/examples).
+For more examples, check [examples folder](https://github.com/blaz-r/pi_pico_neopixel/tree/main/examples) and [documentation](https://github.com/blaz-r/pi_pico_neopixel/wiki).
 
 ## HSV colors
 
