@@ -199,21 +199,20 @@ class Neopixel:
         else:
             self.pixels[pixel_num] = pix_value
 
-    def get_pixelRGB(self, pixel_num):
+    def get_pixel(self, pixel_num):
         """
-        Get red, green and blue value of pixel on position <pixel_num>
+        Get red, green, blue and white (if applicable) values of pixel on position <pixel_num>
 
-        :param pixel_num: Index of pixel to be set or slice object representing multiple leds
+        :param pixel_num: Index of pixel to be set
         :return rgb_w: Tuple of form (r, g, b) or (r, g, b, w) representing color to be used
         """
         balance = self.pixels[pixel_num]
+        sh_R, sh_G, sh_B, sh_W = self.shift
         if self.W_in_mode:
-            w = balance & 255
-            balance = (balance-w) >> 8
-        b = balance & 255
-        balance = (balance-b) >> 8
-        r = balance & 255
-        g = ((balance-r) >> 8) & 255
+            w = (balance >> sh_W) & 255
+        b = (balance >> sh_B) & 255
+        r = (balance >> sh_R) & 255
+        g = (balance >> sh_G) & 255
         red = int(r * 255 / self.brightness() )
         green = int(g * 255 / self.brightness() )
         blue = int(b * 255 / self.brightness() )
