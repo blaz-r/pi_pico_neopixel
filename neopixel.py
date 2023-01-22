@@ -199,6 +199,29 @@ class Neopixel:
         else:
             self.pixels[pixel_num] = pix_value
 
+    def get_pixel(self, pixel_num):
+        """
+        Get red, green, blue and white (if applicable) values of pixel on position <pixel_num>
+
+        :param pixel_num: Index of pixel to be set
+        :return rgb_w: Tuple of form (r, g, b) or (r, g, b, w) representing color to be used
+        """
+        balance = self.pixels[pixel_num]
+        sh_R, sh_G, sh_B, sh_W = self.shift
+        if self.W_in_mode:
+            w = (balance >> sh_W) & 255
+        b = (balance >> sh_B) & 255
+        r = (balance >> sh_R) & 255
+        g = (balance >> sh_G) & 255
+        red = int(r * 255 / self.brightness() )
+        green = int(g * 255 / self.brightness() )
+        blue = int(b * 255 / self.brightness() )
+        if self.W_in_mode:
+            white = int(w * 255 / self.brightness() )
+            return (red,green,blue,white)
+        else:
+            return (red,green,blue)
+
     def __setitem__(self, idx, rgb_w):
         """
         if npix is a Neopixel object,
