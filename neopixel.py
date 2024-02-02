@@ -229,6 +229,7 @@ class Neopixel:
         npix[15:21] = (255,0,0)     # <- sets 16,17 .. 20 to red
         npix[21:29:2] = (0,0,255)   # <- sets 21,23,25,27 to blue
         npix[1::2] = (0,0,0)        # <- sets all odd pixels to 'off'
+        npix[:] = [(0,5,0),(0,5,0)] # <- replaces all pixels with those from the array
         (the 'slice' cases pass idx as a 'slice' object, and
         set_pixel processes the slice)
 
@@ -236,7 +237,17 @@ class Neopixel:
         :param rgb_w: Tuple of form (r, g, b) or (r, g, b, w) representing color to be used
         :return:
         """
-        self.set_pixel(idx, rgb_w)
+        if type(rgb_w) is list:
+            for i in range(self.num_leds):
+                self.set_pixel(i, rgb_w[i])
+        else:
+            self.set_pixel(idx, rgb_w)
+
+    def __len__(self):
+        return self.num_leds
+
+    def __getitem__(self, idx):
+        return self.get_pixel(idx)
 
     def colorHSV(self, hue, sat, val):
         """
