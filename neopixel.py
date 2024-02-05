@@ -1,4 +1,4 @@
-import array, time
+import array, time, struct
 from machine import Pin
 import rp2
 
@@ -20,18 +20,28 @@ def ws2812():
 
 
 # PIO state machine for RGBW. Pulls 32 bits (rgbw -> 4 * 8bit) automatically
-@rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=True, pull_thresh=32)
+@rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=False, pull_thresh=32)
 def sk6812():
-    T1 = 2
-    T2 = 5
-    T3 = 3
     wrap_target()
+    pull(block)               .side(0)
+    out(y, 32)                .side(0)
+
     label("bitloop")
-    out(x, 1)               .side(0)    [T3 - 1]
-    jmp(not_x, "do_zero")   .side(1)    [T1 - 1]
-    jmp("bitloop")          .side(1)    [T2 - 1]
+    pull(ifempty)             .side(0)
+    out(x, 1)                 .side(0)    [5]
+    jmp(not_x, "do_zero")     .side(1)    [3]
+    jmp(y_dec, "bitloop")     .side(1)    [4]
+    jmp("end_sequence")       .side(0)
+
     label("do_zero")
-    nop()                   .side(0)    [T2 - 1]
+    jmp(y_dec, "bitloop")     .side(0)    [4]
+
+    label("end_sequence")
+    pull(block)               .side(0)
+    out(y, 32)                .side(0)
+
+    label("wait_reset")
+    jmp(y_dec, "wait_reset")  .side(0)
     wrap()
 
 
@@ -73,7 +83,7 @@ class Neopixel:
     #    'brightnessvalue', # brightness scale factor 1..255
     # ]
 
-    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0001):
+    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=3):
         """
         Constructor for library class
 
@@ -85,22 +95,32 @@ class Neopixel:
         :param delay: [default: 0.0001] delay used for latching of leds when sending data
         """
         self.pixels = array.array("I", [0] * num_leds)
+        # self.pixels_out = array.array("I", [0] * num_leds)
         self.mode = mode
         self.W_in_mode = 'W' in mode
+        bpp = 3
         if self.W_in_mode:
             # RGBW uses different PIO state machine configuration
-            self.sm = rp2.StateMachine(state_machine, sk6812, freq=8000000, sideset_base=Pin(pin))
+            self.sm = rp2.StateMachine(state_machine, sk6812, freq=12_800_000, sideset_base=Pin(pin))
             # tuple of values required to shift bit into position (check class desc.)
             self.shift = ((mode.index('R') ^ 3) * 8, (mode.index('G') ^ 3) * 8,
                           (mode.index('B') ^ 3) * 8, (mode.index('W') ^ 3) * 8)
+            bpp = 4
         else:
-            self.sm = rp2.StateMachine(state_machine, ws2812, freq=8000000, sideset_base=Pin(pin))
+            self.sm = rp2.StateMachine(state_machine, ws2812, freq=12_800_000, sideset_base=Pin(pin))
             self.shift = (((mode.index('R') ^ 3) - 1) * 8, ((mode.index('G') ^ 3) - 1) * 8,
                           ((mode.index('B') ^ 3) - 1) * 8, 0)
         self.sm.active(1)
         self.num_leds = num_leds
         self.delay = delay
         self.brightnessvalue = 255
+
+        byte_count = bpp * num_leds
+        bit_count = byte_count * 8
+        padding_count = -byte_count % 4
+        self.header = bytearray(struct.pack("L", bit_count - 1))
+        self.trailer = bytearray(b"\0" * padding_count + struct.pack("L", 3840))
+
 
     def brightness(self, brightness=None):
         """
@@ -229,6 +249,7 @@ class Neopixel:
         npix[15:21] = (255,0,0)     # <- sets 16,17 .. 20 to red
         npix[21:29:2] = (0,0,255)   # <- sets 21,23,25,27 to blue
         npix[1::2] = (0,0,0)        # <- sets all odd pixels to 'off'
+        npix[:] = [(0,5,0),(0,5,0)] # <- replaces all pixels with those from the array
         (the 'slice' cases pass idx as a 'slice' object, and
         set_pixel processes the slice)
 
@@ -236,7 +257,17 @@ class Neopixel:
         :param rgb_w: Tuple of form (r, g, b) or (r, g, b, w) representing color to be used
         :return:
         """
-        self.set_pixel(idx, rgb_w)
+        if type(rgb_w) is list:
+            for i in range(self.num_leds):
+                self.set_pixel(i, rgb_w[i])
+        else:
+            self.set_pixel(idx, rgb_w)
+
+    def __len__(self):
+        return self.num_leds
+
+    def __getitem__(self, idx):
+        return self.get_pixel(idx)
 
     def colorHSV(self, hue, sat, val):
         """
@@ -326,10 +357,10 @@ class Neopixel:
         cut = 8
         if self.W_in_mode:
             cut = 0
-        sm_put = self.sm.put
-        for pixval in self.pixels:
-            sm_put(pixval, cut)
-        time.sleep(self.delay)
+
+        self.sm.put(self.header, 0)
+        self.sm.put(memoryview(self.pixels), cut)
+        self.sm.put(self.trailer, 0)
 
     def fill(self, rgb_w, how_bright=None):
         """
