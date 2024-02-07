@@ -3,45 +3,29 @@ from machine import Pin
 import rp2
 
 
-# PIO state machine for RGB. Pulls 24 bits (rgb -> 3 * 8bit) automatically
-@rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=True, pull_thresh=24)
-def ws2812():
-    T1 = 2
-    T2 = 5
-    T3 = 3
-    wrap_target()
-    label("bitloop")
-    out(x, 1)               .side(0)    [T3 - 1]
-    jmp(not_x, "do_zero")   .side(1)    [T1 - 1]
-    jmp("bitloop")          .side(1)    [T2 - 1]
-    label("do_zero")
-    nop()                   .side(0)    [T2 - 1]
-    wrap()
-
-
-# PIO state machine for RGBW. Pulls 32 bits (rgbw -> 4 * 8bit) automatically
+# based on https://learn.adafruit.com/intro-to-rp2040-pio-with-circuitpython/advanced-using-pio-to-drive-neopixels-in-the-background by https://learn.adafruit.com/u/jepler
 @rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=False, pull_thresh=32)
 def sk6812():
     wrap_target()
-    pull(block)               .side(0)
-    out(y, 32)                .side(0)
+    pull(block)               .side(0)        # get fresh NeoPixel bit count value
+    out(y, 32)                .side(0)        # get count of NeoPixel bits
 
     label("bitloop")
-    pull(ifempty)             .side(0)
+    pull(ifempty)             .side(0)        # drive low
     out(x, 1)                 .side(0)    [5]
-    jmp(not_x, "do_zero")     .side(1)    [3]
-    jmp(y_dec, "bitloop")     .side(1)    [4]
-    jmp("end_sequence")       .side(0)
+    jmp(not_x, "do_zero")     .side(1)    [3] # drive high and branch depending on bit val
+    jmp(y_dec, "bitloop")     .side(1)    [4] # drive high for a one (long pulse)
+    jmp("end_sequence")       .side(0)        # sequence is over
 
     label("do_zero")
-    jmp(y_dec, "bitloop")     .side(0)    [4]
+    jmp(y_dec, "bitloop")     .side(0)    [4] # drive low for a zero (short pulse)
 
     label("end_sequence")
-    pull(block)               .side(0)
-    out(y, 32)                .side(0)
+    pull(block)               .side(0)        # get fresh delay value
+    out(y, 32)                .side(0)        # get delay count
 
     label("wait_reset")
-    jmp(y_dec, "wait_reset")  .side(0)
+    jmp(y_dec, "wait_reset")  .side(0)        # wait until delay elapses
     wrap()
 
 
@@ -107,7 +91,7 @@ class Neopixel:
                           (mode.index('B') ^ 3) * 8, (mode.index('W') ^ 3) * 8)
             bpp = 4
         else:
-            self.sm = rp2.StateMachine(state_machine, ws2812, freq=12_800_000, sideset_base=Pin(pin))
+            self.sm = rp2.StateMachine(state_machine, sk6812, freq=12_800_000, sideset_base=Pin(pin))
             self.shift = (((mode.index('R') ^ 3) - 1) * 8, ((mode.index('G') ^ 3) - 1) * 8,
                           ((mode.index('B') ^ 3) - 1) * 8, 0)
         self.sm.active(1)
@@ -115,10 +99,13 @@ class Neopixel:
         self.delay = delay
         self.brightnessvalue = 255
 
+        # from https://learn.adafruit.com/intro-to-rp2040-pio-with-circuitpython/advanced-using-pio-to-drive-neopixels-in-the-background
         byte_count = bpp * num_leds
         bit_count = byte_count * 8
         padding_count = -byte_count % 4
+        # send number of bits to read
         self.header = bytearray(struct.pack("L", bit_count - 1))
+        # pad if needed, then send number of cycles to delay
         self.trailer = bytearray(b"\0" * padding_count + struct.pack("L", 3840))
 
 
