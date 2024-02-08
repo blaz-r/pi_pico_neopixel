@@ -40,10 +40,6 @@ class slice_maker_class:
 slice_maker = slice_maker_class()
 
 
-# Delay here is the reset time. You need a pause to reset the LED strip back to the initial LED
-# however, if you have quite a bit of processing to do before the next time you update the strip
-# you could put in delay=0 (or a lower delay)
-#
 # Class supports different order of individual colors (GRB, RGB, WRGB, GWRB ...). In order to achieve
 # this, we need to flip the indexes: in 'RGBW', 'R' is on index 0, but we need to shift it left by 3 * 8bits,
 # so in it's inverse, 'WBGR', it has exactly right index. Since micropython doesn't have [::-1] and recursive rev()
@@ -63,11 +59,10 @@ class Neopixel:
     #    'W_in_mode',  # bool: is 'W' in mode
     #    'sm',         # state machine
     #    'shift',      # shift amount for each component, in a tuple for (R,B,G,W)
-    #    'delay',      # delay amount
     #    'brightnessvalue', # brightness scale factor 1..255
     # ]
 
-    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=3):
+    def __init__(self, num_leds, state_machine, pin, mode="RGB"):
         """
         Constructor for library class
 
@@ -76,7 +71,6 @@ class Neopixel:
         :param pin: pin on which data line to led-strip is connected
         :param mode: [default: "RGB"] mode and order of bits representing the color value.
         This can be any order of RGB or RGBW (neopixels are usually GRB)
-        :param delay: [default: 0.0001] delay used for latching of leds when sending data
         """
         # self.pixels_out = array.array("I", [0] * num_leds)
         self.mode = mode
@@ -95,7 +89,6 @@ class Neopixel:
                           ((mode.index('B') ^ 3) - 1) * 8, 0)
         self.sm.active(1)
         self.num_leds = num_leds
-        self.delay = delay
         self.brightnessvalue = 255
 
         # from https://learn.adafruit.com/intro-to-rp2040-pio-with-circuitpython/advanced-using-pio-to-drive-neopixels-in-the-background
