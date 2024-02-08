@@ -4,7 +4,7 @@ import rp2
 
 
 # based on https://learn.adafruit.com/intro-to-rp2040-pio-with-circuitpython/advanced-using-pio-to-drive-neopixels-in-the-background by https://learn.adafruit.com/u/jepler
-@rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=False, pull_thresh=32)
+@rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=False, pull_thresh=32)
 def sk6812():
     wrap_target()
     pull(block)               .side(0)        # get fresh NeoPixel bit count value
@@ -78,7 +78,6 @@ class Neopixel:
         This can be any order of RGB or RGBW (neopixels are usually GRB)
         :param delay: [default: 0.0001] delay used for latching of leds when sending data
         """
-        self.pixels = array.array("I", [0] * num_leds)
         # self.pixels_out = array.array("I", [0] * num_leds)
         self.mode = mode
         self.W_in_mode = 'W' in mode
@@ -103,11 +102,25 @@ class Neopixel:
         byte_count = bpp * num_leds
         bit_count = byte_count * 8
         padding_count = -byte_count % 4
-        # send number of bits to read
-        self.header = bytearray(struct.pack("L", bit_count - 1))
-        # pad if needed, then send number of cycles to delay
-        self.trailer = bytearray(b"\0" * padding_count + struct.pack("L", 3840))
 
+        # use a single array
+        self.pixels = array.array("I")
+
+        # send number of bits to read
+        self.pixels.append(bit_count - 1)
+
+        # store offset into pixels array for get/set later
+        self.offset = len(self.pixels)
+
+        # add starting values for each pixel
+        pix = array.array("I", [0] * num_leds)
+        self.pixels.extend(pix)
+
+        # send number of cycles to delay
+        self.pixels.append(3840)
+
+        # use a memoryview to
+        self.mv = memoryview(self.pixels)
 
     def brightness(self, brightness=None):
         """
@@ -199,12 +212,13 @@ class Neopixel:
             white = round(rgb_w[3] * bratio)
 
         pix_value = white << sh_W | blue << sh_B | red << sh_R | green << sh_G
+        offset = self.offset
         # set some subset, if pixel_num is a slice:
         if type(pixel_num) is slice:
             for i in range(*pixel_num.indices(self.num_leds)):
-                self.pixels[i] = pix_value
+                self.pixels[i + offset] = pix_value
         else:
-            self.pixels[pixel_num] = pix_value
+            self.pixels[pixel_num + offset] = pix_value
 
     def get_pixel(self, pixel_num):
         """
@@ -213,7 +227,7 @@ class Neopixel:
         :param pixel_num: Index of pixel to be set
         :return rgb_w: Tuple of form (r, g, b) or (r, g, b, w) representing color to be used
         """
-        balance = self.pixels[pixel_num]
+        balance = self.pixels[pixel_num + self.offset]
         sh_R, sh_G, sh_B, sh_W = self.shift
         if self.W_in_mode:
             w = (balance >> sh_W) & 255
@@ -329,14 +343,7 @@ class Neopixel:
         This method should be used after every method that changes the state of leds or after a chain of changes.
         :return: None
         """
-        # If mode is RGB, we cut 8 bits of, otherwise we keep all 32
-        cut = 8
-        if self.W_in_mode:
-            cut = 0
-
-        self.sm.put(self.header, 0)
-        self.sm.put(memoryview(self.pixels), cut)
-        self.sm.put(self.trailer, 0)
+        self.sm.put(self.mv)
 
     def fill(self, rgb_w, how_bright=None):
         """
