@@ -1,37 +1,31 @@
-import array, time
+import array, time, struct
 from machine import Pin
 import rp2
 
 
-# PIO state machine for RGB. Pulls 24 bits (rgb -> 3 * 8bit) automatically
-@rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=True, pull_thresh=24)
-def ws2812():
-    T1 = 2
-    T2 = 5
-    T3 = 3
-    wrap_target()
-    label("bitloop")
-    out(x, 1)               .side(0)    [T3 - 1]
-    jmp(not_x, "do_zero")   .side(1)    [T1 - 1]
-    jmp("bitloop")          .side(1)    [T2 - 1]
-    label("do_zero")
-    nop()                   .side(0)    [T2 - 1]
-    wrap()
-
-
-# PIO state machine for RGBW. Pulls 32 bits (rgbw -> 4 * 8bit) automatically
-@rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=True, pull_thresh=32)
+# based on https://learn.adafruit.com/intro-to-rp2040-pio-with-circuitpython/advanced-using-pio-to-drive-neopixels-in-the-background by https://learn.adafruit.com/u/jepler
+@rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=False, pull_thresh=32)
 def sk6812():
-    T1 = 2
-    T2 = 5
-    T3 = 3
     wrap_target()
+    pull(block)               .side(0)        # get fresh NeoPixel bit count value
+    out(y, 32)                .side(0)        # get count of NeoPixel bits
+
     label("bitloop")
-    out(x, 1)               .side(0)    [T3 - 1]
-    jmp(not_x, "do_zero")   .side(1)    [T1 - 1]
-    jmp("bitloop")          .side(1)    [T2 - 1]
+    pull(ifempty)             .side(0)        # drive low
+    out(x, 1)                 .side(0)    [5]
+    jmp(not_x, "do_zero")     .side(1)    [3] # drive high and branch depending on bit val
+    jmp(y_dec, "bitloop")     .side(1)    [4] # drive high for a one (long pulse)
+    jmp("end_sequence")       .side(0)        # sequence is over
+
     label("do_zero")
-    nop()                   .side(0)    [T2 - 1]
+    jmp(y_dec, "bitloop")     .side(0)    [4] # drive low for a zero (short pulse)
+
+    label("end_sequence")
+    pull(block)               .side(0)        # get fresh delay value
+    out(y, 32)                .side(0)        # get delay count
+
+    label("wait_reset")
+    jmp(y_dec, "wait_reset")  .side(0)        # wait until delay elapses
     wrap()
 
 
@@ -46,10 +40,6 @@ class slice_maker_class:
 slice_maker = slice_maker_class()
 
 
-# Delay here is the reset time. You need a pause to reset the LED strip back to the initial LED
-# however, if you have quite a bit of processing to do before the next time you update the strip
-# you could put in delay=0 (or a lower delay)
-#
 # Class supports different order of individual colors (GRB, RGB, WRGB, GWRB ...). In order to achieve
 # this, we need to flip the indexes: in 'RGBW', 'R' is on index 0, but we need to shift it left by 3 * 8bits,
 # so in it's inverse, 'WBGR', it has exactly right index. Since micropython doesn't have [::-1] and recursive rev()
@@ -69,11 +59,10 @@ class Neopixel:
     #    'W_in_mode',  # bool: is 'W' in mode
     #    'sm',         # state machine
     #    'shift',      # shift amount for each component, in a tuple for (R,B,G,W)
-    #    'delay',      # delay amount
     #    'brightnessvalue', # brightness scale factor 1..255
     # ]
 
-    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0001):
+    def __init__(self, num_leds, state_machine, pin, mode="RGB"):
         """
         Constructor for library class
 
@@ -82,25 +71,49 @@ class Neopixel:
         :param pin: pin on which data line to led-strip is connected
         :param mode: [default: "RGB"] mode and order of bits representing the color value.
         This can be any order of RGB or RGBW (neopixels are usually GRB)
-        :param delay: [default: 0.0001] delay used for latching of leds when sending data
         """
-        self.pixels = array.array("I", [0] * num_leds)
+        # self.pixels_out = array.array("I", [0] * num_leds)
         self.mode = mode
         self.W_in_mode = 'W' in mode
+        bpp = 3
         if self.W_in_mode:
             # RGBW uses different PIO state machine configuration
-            self.sm = rp2.StateMachine(state_machine, sk6812, freq=8000000, sideset_base=Pin(pin))
+            self.sm = rp2.StateMachine(state_machine, sk6812, freq=12_800_000, sideset_base=Pin(pin))
             # tuple of values required to shift bit into position (check class desc.)
             self.shift = ((mode.index('R') ^ 3) * 8, (mode.index('G') ^ 3) * 8,
                           (mode.index('B') ^ 3) * 8, (mode.index('W') ^ 3) * 8)
+            bpp = 4
         else:
-            self.sm = rp2.StateMachine(state_machine, ws2812, freq=8000000, sideset_base=Pin(pin))
+            self.sm = rp2.StateMachine(state_machine, sk6812, freq=12_800_000, sideset_base=Pin(pin))
             self.shift = (((mode.index('R') ^ 3) - 1) * 8, ((mode.index('G') ^ 3) - 1) * 8,
                           ((mode.index('B') ^ 3) - 1) * 8, 0)
         self.sm.active(1)
         self.num_leds = num_leds
-        self.delay = delay
         self.brightnessvalue = 255
+
+        # from https://learn.adafruit.com/intro-to-rp2040-pio-with-circuitpython/advanced-using-pio-to-drive-neopixels-in-the-background
+        byte_count = bpp * num_leds
+        bit_count = byte_count * 8
+        padding_count = -byte_count % 4
+
+        # use a single array
+        self.pixels = array.array("I")
+
+        # send number of bits to read
+        self.pixels.append(bit_count - 1)
+
+        # store offset into pixels array for get/set later
+        self.offset = len(self.pixels)
+
+        # add starting values for each pixel
+        pix = array.array("I", [0] * num_leds)
+        self.pixels.extend(pix)
+
+        # send number of cycles to delay
+        self.pixels.append(3840)
+
+        # use a memoryview to
+        self.mv = memoryview(self.pixels)
 
     def brightness(self, brightness=None):
         """
@@ -192,12 +205,13 @@ class Neopixel:
             white = round(rgb_w[3] * bratio)
 
         pix_value = white << sh_W | blue << sh_B | red << sh_R | green << sh_G
+        offset = self.offset
         # set some subset, if pixel_num is a slice:
         if type(pixel_num) is slice:
             for i in range(*pixel_num.indices(self.num_leds)):
-                self.pixels[i] = pix_value
+                self.pixels[i + offset] = pix_value
         else:
-            self.pixels[pixel_num] = pix_value
+            self.pixels[pixel_num + offset] = pix_value
 
     def get_pixel(self, pixel_num):
         """
@@ -206,7 +220,7 @@ class Neopixel:
         :param pixel_num: Index of pixel to be set
         :return rgb_w: Tuple of form (r, g, b) or (r, g, b, w) representing color to be used
         """
-        balance = self.pixels[pixel_num]
+        balance = self.pixels[pixel_num + self.offset]
         sh_R, sh_G, sh_B, sh_W = self.shift
         if self.W_in_mode:
             w = (balance >> sh_W) & 255
@@ -322,14 +336,7 @@ class Neopixel:
         This method should be used after every method that changes the state of leds or after a chain of changes.
         :return: None
         """
-        # If mode is RGB, we cut 8 bits of, otherwise we keep all 32
-        cut = 8
-        if self.W_in_mode:
-            cut = 0
-        sm_put = self.sm.put
-        for pixval in self.pixels:
-            sm_put(pixval, cut)
-        time.sleep(self.delay)
+        self.sm.put(self.mv)
 
     def fill(self, rgb_w, how_bright=None):
         """
