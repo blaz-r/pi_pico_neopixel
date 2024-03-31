@@ -243,14 +243,29 @@ class Neopixel:
         npix[15:21] = (255,0,0)     # <- sets 16,17 .. 20 to red
         npix[21:29:2] = (0,0,255)   # <- sets 21,23,25,27 to blue
         npix[1::2] = (0,0,0)        # <- sets all odd pixels to 'off'
+        npix[:] = [(0,5,0),(0,5,0)] # <- replaces all pixels with those from the array
         (the 'slice' cases pass idx as a 'slice' object, and
         set_pixel processes the slice)
 
         :param idx: Index can either be indexing number or slice
-        :param rgb_w: Tuple of form (r, g, b) or (r, g, b, w) representing color to be used
-        :return:
+        :param rgb_w: Tuple (or list of tuples) of form (r, g, b) or (r, g, b, w) representing color to be used
+        :return: None
         """
-        self.set_pixel(idx, rgb_w)
+        if type(rgb_w) is list:
+            # set some subset, if idx is a slice:
+            if type(idx) is slice:
+                for rgb_i, pixel_i in enumerate(range(*idx.indices(self.num_leds))):
+                    self.set_pixel(pixel_i, rgb_w[rgb_i])
+            else:
+                raise ValueError("Index must be a slice when setting multiple pixels as list")
+        else:
+            self.set_pixel(idx, rgb_w)
+
+    def __len__(self):
+        return self.num_leds
+
+    def __getitem__(self, idx):
+        return self.get_pixel(idx)
 
     def colorHSV(self, hue, sat, val):
         """
@@ -337,6 +352,7 @@ class Neopixel:
         :return: None
         """
         self.sm.put(self.mv)
+
 
     def fill(self, rgb_w, how_bright=None):
         """
