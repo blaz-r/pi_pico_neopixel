@@ -73,7 +73,7 @@ class Neopixel:
     #    'brightnessvalue', # brightness scale factor 1..255
     # ]
 
-    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0001):
+    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0003):
         """
         Constructor for library class
 
