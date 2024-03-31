@@ -234,12 +234,16 @@ class Neopixel:
         set_pixel processes the slice)
 
         :param idx: Index can either be indexing number or slice
-        :param rgb_w: Tuple of form (r, g, b) or (r, g, b, w) representing color to be used
-        :return:
+        :param rgb_w: Tuple (or list of tuples) of form (r, g, b) or (r, g, b, w) representing color to be used
+        :return: None
         """
         if type(rgb_w) is list:
-            for i in range(self.num_leds):
-                self.set_pixel(i, rgb_w[i])
+            # set some subset, if idx is a slice:
+            if type(idx) is slice:
+                for rgb_i, pixel_i in enumerate(range(*idx.indices(self.num_leds))):
+                    self.set_pixel(pixel_i, rgb_w[rgb_i])
+            else:
+                raise ValueError("Index must be a slice when setting multiple pixels as list")
         else:
             self.set_pixel(idx, rgb_w)
 
