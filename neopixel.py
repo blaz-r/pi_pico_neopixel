@@ -326,9 +326,9 @@ class Neopixel:
         cut = 8
         if self.W_in_mode:
             cut = 0
-        sm_put = self.sm.put
-        for pixval in self.pixels:
-            sm_put(pixval, cut)
+        
+        self.sm.put(self.pixels, cut)
+
         time.sleep(self.delay)
 
     def fill(self, rgb_w, how_bright=None):
