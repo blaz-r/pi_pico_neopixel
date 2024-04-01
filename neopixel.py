@@ -1,4 +1,4 @@
-import array, time, struct
+import array
 from machine import Pin
 import rp2
 
@@ -244,7 +244,7 @@ class Neopixel:
         """
         # offset of 1 due to header
         balance = self.pixels[pixel_num + 1]
-        
+
         sh_R, sh_G, sh_B, sh_W = self.shift
         if self.W_in_mode:
             w = (balance >> sh_W) & 255
