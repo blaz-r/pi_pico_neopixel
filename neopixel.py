@@ -4,13 +4,44 @@ import rp2
 
 
 # based on https://learn.adafruit.com/intro-to-rp2040-pio-with-circuitpython/advanced-using-pio-to-drive-neopixels-in-the-background by https://learn.adafruit.com/u/jepler
-@rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=False, pull_thresh=32)
+@rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=False)
 def sk6812():
     wrap_target()
     pull(block)               .side(0)        # get fresh NeoPixel bit count value
     out(y, 32)                .side(0)        # get count of NeoPixel bits
 
     label("bitloop")
+    pull(ifempty)             .side(0)        # drive low
+    out(x, 1)                 .side(0)    [5]
+    jmp(not_x, "do_zero")     .side(1)    [3] # drive high and branch depending on bit val
+    jmp(y_dec, "bitloop")     .side(1)    [4] # drive high for a one (long pulse)
+    jmp("end_sequence")       .side(0)        # sequence is over
+
+    label("do_zero")
+    jmp(y_dec, "bitloop")     .side(0)    [4] # drive low for a zero (short pulse)
+
+    label("end_sequence")
+    pull(block)               .side(0)        # get fresh delay value
+    out(y, 32)                .side(0)        # get delay count
+
+    label("wait_reset")
+    jmp(y_dec, "wait_reset")  .side(0)        # wait until delay elapses
+    wrap()
+
+
+# based on https://learn.adafruit.com/intro-to-rp2040-pio-with-circuitpython/advanced-using-pio-to-drive-neopixels-in-the-background by https://learn.adafruit.com/u/jepler
+@rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=False)
+def ws2812():
+    wrap_target()
+    pull(block)               .side(0)        # get fresh NeoPixel bit count value
+    out(y, 32)                .side(0)        # get count of NeoPixel bits
+
+    label("bitloop")
+    jmp(not_osre, "bit_out")  .side(0)        # if OSR still contains data, skip this section
+    pull(ifempty)             .side(0)        # pull new 32bits of RGB data
+    out(x, 8)                 .side(0)        # skip first 8 as RGB is 24bits
+
+    label("bit_out")
     pull(ifempty)             .side(0)        # drive low
     out(x, 1)                 .side(0)    [5]
     jmp(not_x, "do_zero")     .side(1)    [3] # drive high and branch depending on bit val
@@ -54,12 +85,14 @@ class Neopixel:
     # to describe the data members...
     # __slots__ = [
     #    'num_leds',   # number of LEDs
-    #    'pixels',     # array.array('I') of raw data for LEDs
+    #    'pixels',     # array.array('I') of raw data for LEDs (with header and trailer)
     #    'mode',       # mode 'RGB' etc
     #    'W_in_mode',  # bool: is 'W' in mode
     #    'sm',         # state machine
     #    'shift',      # shift amount for each component, in a tuple for (R,B,G,W)
     #    'brightnessvalue', # brightness scale factor 1..255
+    #    'header',     # header - num of data bits in the data stream
+    #    'trailer',    # trailer - delay at the end
     # ]
 
     def __init__(self, num_leds, state_machine, pin, mode="RGB"):
@@ -72,7 +105,6 @@ class Neopixel:
         :param mode: [default: "RGB"] mode and order of bits representing the color value.
         This can be any order of RGB or RGBW (neopixels are usually GRB)
         """
-        # self.pixels_out = array.array("I", [0] * num_leds)
         self.mode = mode
         self.W_in_mode = 'W' in mode
         bpp = 3
@@ -84,7 +116,7 @@ class Neopixel:
                           (mode.index('B') ^ 3) * 8, (mode.index('W') ^ 3) * 8)
             bpp = 4
         else:
-            self.sm = rp2.StateMachine(state_machine, sk6812, freq=12_800_000, sideset_base=Pin(pin))
+            self.sm = rp2.StateMachine(state_machine, ws2812, freq=12_800_000, sideset_base=Pin(pin))
             self.shift = (((mode.index('R') ^ 3) - 1) * 8, ((mode.index('G') ^ 3) - 1) * 8,
                           ((mode.index('B') ^ 3) - 1) * 8, 0)
         self.sm.active(1)
@@ -94,26 +126,15 @@ class Neopixel:
         # from https://learn.adafruit.com/intro-to-rp2040-pio-with-circuitpython/advanced-using-pio-to-drive-neopixels-in-the-background
         byte_count = bpp * num_leds
         bit_count = byte_count * 8
-        padding_count = -byte_count % 4
 
-        # use a single array
-        self.pixels = array.array("I")
-
-        # send number of bits to read
-        self.pixels.append(bit_count - 1)
-
-        # store offset into pixels array for get/set later
-        self.offset = len(self.pixels)
-
-        # add starting values for each pixel
-        pix = array.array("I", [0] * num_leds)
-        self.pixels.extend(pix)
-
-        # send number of cycles to delay
-        self.pixels.append(3840)
-
-        # use a memoryview to
-        self.mv = memoryview(self.pixels)
+        # array of 32bit integers, with header and trailer at the beginning and end
+        self.pixels = array.array("I", [0] * (num_leds + 2))
+        # header - num of bits in the data stream
+        self.header = bit_count - 1
+        # trailer - delay at the end (12.8 Mhz clk -> 1 period = 7.8125e-8, 3840 * 7.8125e-8 = 0.0003s delay)
+        self.trailer = 3840
+        self.pixels[0] = self.header
+        self.pixels[-1] = self.trailer
 
     def brightness(self, brightness=None):
         """
@@ -205,13 +226,14 @@ class Neopixel:
             white = round(rgb_w[3] * bratio)
 
         pix_value = white << sh_W | blue << sh_B | red << sh_R | green << sh_G
-        offset = self.offset
         # set some subset, if pixel_num is a slice:
         if type(pixel_num) is slice:
             for i in range(*pixel_num.indices(self.num_leds)):
-                self.pixels[i + offset] = pix_value
+                # offset of 1 due to header
+                self.pixels[i + 1] = pix_value
         else:
-            self.pixels[pixel_num + offset] = pix_value
+            # offset of 1 due to header
+            self.pixels[pixel_num + 1] = pix_value
 
     def get_pixel(self, pixel_num):
         """
@@ -220,7 +242,9 @@ class Neopixel:
         :param pixel_num: Index of pixel to be set
         :return rgb_w: Tuple of form (r, g, b) or (r, g, b, w) representing color to be used
         """
-        balance = self.pixels[pixel_num + self.offset]
+        # offset of 1 due to header
+        balance = self.pixels[pixel_num + 1]
+        
         sh_R, sh_G, sh_B, sh_W = self.shift
         if self.W_in_mode:
             w = (balance >> sh_W) & 255
@@ -331,7 +355,10 @@ class Neopixel:
         """
         if num_of_pixels is None:
             num_of_pixels = 1
-        self.pixels = self.pixels[num_of_pixels:] + self.pixels[:num_of_pixels]
+        # offset of 1 due to header
+        num_of_pixels += 1
+        #self.pixels = self.pixels[num_of_pixels:] + self.pixels[:num_of_pixels]
+        self.pixels = array.array("I", [self.pixels[0]] + list(self.pixels[num_of_pixels:-1]) + list(self.pixels[1:num_of_pixels]) + [self.pixels[-1]])
 
     def rotate_right(self, num_of_pixels=None):
         """
@@ -342,8 +369,11 @@ class Neopixel:
         """
         if num_of_pixels is None:
             num_of_pixels = 1
+        # offset of 1 due to header
+        num_of_pixels += 1
         num_of_pixels = -1 * num_of_pixels
-        self.pixels = self.pixels[num_of_pixels:] + self.pixels[:num_of_pixels]
+        #self.pixels = self.pixels[num_of_pixels:] + self.pixels[:num_of_pixels]
+        self.pixels = array.array("I", [self.pixels[0]] + list(self.pixels[num_of_pixels:-1]) + list(self.pixels[1:num_of_pixels]) + [self.pixels[-1]])
 
     def show(self):
         """
@@ -351,7 +381,8 @@ class Neopixel:
         This method should be used after every method that changes the state of leds or after a chain of changes.
         :return: None
         """
-        self.sm.put(self.mv)
+        # put entire pixel data along with header and trailer into TX FIFO
+        self.sm.put(memoryview(self.pixels))
 
 
     def fill(self, rgb_w, how_bright=None):
@@ -371,4 +402,6 @@ class Neopixel:
 
         :return: None
         """
-        self.pixels = array.array("I", [0] * self.num_leds)
+        self.pixels = array.array("I", [0] * (self.num_leds + 2))
+        self.pixels[0] = self.header
+        self.pixels[-1] = self.trailer
