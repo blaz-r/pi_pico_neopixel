@@ -1,5 +1,5 @@
 import array, time
-from machine import Pin
+from machine import Pin, enable_irq, disable_irq
 import rp2
 
 
@@ -73,7 +73,7 @@ class Neopixel:
     #    'brightnessvalue', # brightness scale factor 1..255
     # ]
 
-    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0003):
+    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0003, critical=False):
         """
         Constructor for library class
 
@@ -83,6 +83,8 @@ class Neopixel:
         :param mode: [default: "RGB"] mode and order of bits representing the color value.
         This can be any order of RGB or RGBW (neopixels are usually GRB)
         :param delay: [default: 0.0001] delay used for latching of leds when sending data
+        :param critical: [default: False] if True, disable interrupts while sending data to the PIO
+        This will eliminate glitching tearing, but could be a problem is have other high priority interrupts
         """
         self.pixels = array.array("I", [0] * num_leds)
         self.mode = mode
@@ -101,6 +103,7 @@ class Neopixel:
         self.num_leds = num_leds
         self.delay = delay
         self.brightnessvalue = 255
+        self.critical = critical
 
     def brightness(self, brightness=None):
         """
@@ -341,8 +344,14 @@ class Neopixel:
         cut = 8
         if self.W_in_mode:
             cut = 0
-        
+
+        if self.critical:
+            irq_state = disable_irq()
+
         self.sm.put(self.pixels, cut)
+
+        if self.critical:
+            enable_irq(irq_state)
 
         time.sleep(self.delay)
 
