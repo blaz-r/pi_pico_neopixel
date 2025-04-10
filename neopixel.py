@@ -101,6 +101,9 @@ class Neopixel:
         self.num_leds = num_leds
         self.delay = delay
         self.brightnessvalue = 255
+        self.dma = rp2.DMA()
+        DATA_REQUEST_INDEX = (pin << 3) + state_machine
+        self.dma_ctrl = self.dma.pack_ctrl(size=2, inc_write=False, treq_sel=DATA_REQUEST_INDEX)
 
     def brightness(self, brightness=None):
         """
@@ -342,7 +345,18 @@ class Neopixel:
         if self.W_in_mode:
             cut = 0
         
-        self.sm.put(self.pixels, cut)
+        data = array.array('I',self.pixels)
+        for i,_ in enumerate(data):
+            data[i] <<= cut
+
+        self.dma.config(read=data,
+                        write=self.sm,
+                        count=len(data),
+                        ctrl=self.dma_ctrl,
+                        trigger=True)
+
+        while self.dma.active():
+            pass
 
         time.sleep(self.delay)
 
