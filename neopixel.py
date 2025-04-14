@@ -115,7 +115,7 @@ class Neopixel:
         if transfer_mode == "DMA" or \
            transfer_mode == "DMA_BLOCKING":
             self.dma = rp2.DMA()
-            DATA_REQUEST_INDEX = (pin << 3) + state_machine
+            DATA_REQUEST_INDEX =  ((state_machine & 0xC) << 1) | (state_machine & 0x3)
             self.dma_ctrl = self.dma.pack_ctrl(size=2, inc_write=False, treq_sel=DATA_REQUEST_INDEX)
 
         elif transfer_mode == "PUT_CRITICAL" or \
@@ -412,3 +412,4 @@ class Neopixel:
         :return: None
         """
         self.pixels = array.array("I", [0] * self.num_leds)
+
