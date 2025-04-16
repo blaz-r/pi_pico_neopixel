@@ -90,8 +90,6 @@ class Neopixel:
                 Solves the glitching problem, but disables interrupts might be undesireable.
             "DMA" : Use DMA to send data to the PIO.
                 Prevents glitching without disabling interrupts, but is more complex.
-            "DMA_BLOCKING" : Use DMA to send data to the PIO, but block until transfer is complete.
-                Helpful if you are looping.
         """
         self.pixels = array.array("I", [0] * num_leds)
         self.mode = mode
@@ -112,15 +110,22 @@ class Neopixel:
         self.brightnessvalue = 255
         self.transfer_mode = transfer_mode
 
-        if transfer_mode == "DMA" or \
-           transfer_mode == "DMA_BLOCKING":
+        if transfer_mode == "DMA":
             self.dma = rp2.DMA()
+            # The TX Data Request index for PIO is the (pio << 3) + state_machine
+            # where state_machine is the sm number FOR THAT PIO. e.g. PIO1, SM1 is 0x8 + 0x1 = 0x9
+            # (See the System DREQ table in the RP2040 or RP2350 datasheet.)
+            # However the micropython rp2 library does not allow selection of PIO and SM separately.
+            # Instead, it counts state machines from 0 to however many there are total.
+            # e.g. PIO1, SM1 is rp2 state machine 5.
+            # So we derive the DREQ from the state machine number by shifting the implied PIO number up a bit.
             DATA_REQUEST_INDEX =  ((state_machine & 0xC) << 1) | (state_machine & 0x3)
             self.dma_ctrl = self.dma.pack_ctrl(size=2, inc_write=False, treq_sel=DATA_REQUEST_INDEX)
 
         elif transfer_mode == "PUT_CRITICAL" or \
              transfer_mode == "PUT":
             pass
+
         else:
             raise ValueError("Invalid transfer mode: {}".format(transfer_mode))
 
@@ -364,35 +369,41 @@ class Neopixel:
         if self.W_in_mode:
             cut = 0
 
-        if self.transfer_mode == "DMA" or \
-           self.transfer_mode == "DMA_BLOCKING":
+        if self.transfer_mode == "DMA":
+            if cut != 0:
+                data = array.array('I',self.pixels)
+                for i,_ in enumerate(data):
+                    data[i] <<= cut
+                dataOut = data
+            else:
+                dataOut = self.pixels
 
-            data = array.array('I',self.pixels)
-            for i,_ in enumerate(data):
-                data[i] <<= cut
+            # Wait until the last transfer completes if it is not done
+            while self.dma.active():
+                pass
 
-            self.dma.config(read=data,
+            # Guarrantee minimum sleep time
+            time.sleep(self.delay)
+
+            self.dma.config(read=dataOut,
                             write=self.sm,
-                            count=len(data),
+                            count=len(dataOut),
                             ctrl=self.dma_ctrl,
                             trigger=True)
-
-            if self.transfer_mode == "DMA_BLOCKING":
-                while self.dma.active():
-                    pass
 
         elif self.transfer_mode == "PUT_CRITICAL":
             irq_state = disable_irq()
             self.sm.put(self.pixels, cut)
             enable_irq(irq_state)
+            time.sleep(self.delay)
 
         elif self.transfer_mode == "PUT":
             self.sm.put(self.pixels, cut)
+            time.sleep(self.delay)
 
         else:
             raise ValueError("Invalid transfer mode: {}".format(self.transfer_mode))
 
-        time.sleep(self.delay)
 
     def fill(self, rgb_w, how_bright=None):
         """
