@@ -370,24 +370,21 @@ class Neopixel:
             cut = 0
 
         if self.transfer_mode == "DMA":
-            if cut != 0:
-                data = array.array('I',self.pixels)
-                for i,_ in enumerate(data):
-                    data[i] <<= cut
-                dataOut = data
-            else:
-                dataOut = self.pixels
-
             # Wait until the last transfer completes if it is not done
             while self.dma.active():
                 pass
-
             # Guarrantee minimum sleep time
             time.sleep(self.delay)
+            
+            # always copy, otherwise we can mess with pixels buffer while DMA reads it
+            data = array.array('I', self.pixels)
+            if cut != 0:
+                for i, _ in enumerate(data):
+                    data[i] <<= cut
 
-            self.dma.config(read=dataOut,
+            self.dma.config(read=data,
                             write=self.sm,
-                            count=len(dataOut),
+                            count=len(data),
                             ctrl=self.dma_ctrl,
                             trigger=True)
 
