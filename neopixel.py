@@ -73,7 +73,7 @@ class Neopixel:
     #    'brightnessvalue', # brightness scale factor 1..255
     # ]
 
-    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0003, critical=False):
+    def __init__(self, num_leds, state_machine, pin, mode="RGB", delay=0.0003, transfer_mode="PUT"):
         """
         Constructor for library class
 
@@ -83,8 +83,13 @@ class Neopixel:
         :param mode: [default: "RGB"] mode and order of bits representing the color value.
         This can be any order of RGB or RGBW (neopixels are usually GRB)
         :param delay: [default: 0.0001] delay used for latching of leds when sending data
-        :param critical: [default: False] if True, disable interrupts while sending data to the PIO
-        This will eliminate glitching tearing, but could be a problem is have other high priority interrupts
+        :param transfer_mode: [default: "PUT"] transfer mode used for sending data to the PIO.
+            "PUT" : Use MicroPython put() method to send data to the PIO
+                This is straightforward, but can result in glitching from FIFO underflow.
+            "PUT_CRITICAL" : Use MicroPython put() method to send data to the PIO and disable IRQs during transfer
+                Solves the glitching problem, but disables interrupts might be undesireable.
+            "DMA" : Use DMA to send data to the PIO.
+                Prevents glitching without disabling interrupts, but is more complex.
         """
         self.pixels = array.array("I", [0] * num_leds)
         self.mode = mode
@@ -103,7 +108,26 @@ class Neopixel:
         self.num_leds = num_leds
         self.delay = delay
         self.brightnessvalue = 255
-        self.critical = critical
+        self.transfer_mode = transfer_mode
+
+        if transfer_mode == "DMA":
+            self.dma = rp2.DMA()
+            # The TX Data Request index for PIO is the (pio << 3) + state_machine
+            # where state_machine is the sm number FOR THAT PIO. e.g. PIO1, SM1 is 0x8 + 0x1 = 0x9
+            # (See the System DREQ table in the RP2040 or RP2350 datasheet.)
+            # However the micropython rp2 library does not allow selection of PIO and SM separately.
+            # Instead, it counts state machines from 0 to however many there are total.
+            # e.g. PIO1, SM1 is rp2 state machine 5.
+            # So we derive the DREQ from the state machine number by shifting the implied PIO number up a bit.
+            DATA_REQUEST_INDEX =  ((state_machine & 0xC) << 1) | (state_machine & 0x3)
+            self.dma_ctrl = self.dma.pack_ctrl(size=2, inc_write=False, treq_sel=DATA_REQUEST_INDEX)
+
+        elif transfer_mode == "PUT_CRITICAL" or \
+             transfer_mode == "PUT":
+            pass
+
+        else:
+            raise ValueError("Invalid transfer mode: {}".format(transfer_mode))
 
     def brightness(self, brightness=None):
         """
@@ -345,15 +369,38 @@ class Neopixel:
         if self.W_in_mode:
             cut = 0
 
-        if self.critical:
+        if self.transfer_mode == "DMA":
+            # Wait until the last transfer completes if it is not done
+            while self.dma.active():
+                pass
+            # Guarrantee minimum sleep time
+            time.sleep(self.delay)
+            
+            # always copy, otherwise we can mess with pixels buffer while DMA reads it
+            data = array.array('I', self.pixels)
+            if cut != 0:
+                for i, _ in enumerate(data):
+                    data[i] <<= cut
+
+            self.dma.config(read=data,
+                            write=self.sm,
+                            count=len(data),
+                            ctrl=self.dma_ctrl,
+                            trigger=True)
+
+        elif self.transfer_mode == "PUT_CRITICAL":
             irq_state = disable_irq()
-
-        self.sm.put(self.pixels, cut)
-
-        if self.critical:
+            self.sm.put(self.pixels, cut)
             enable_irq(irq_state)
+            time.sleep(self.delay)
 
-        time.sleep(self.delay)
+        elif self.transfer_mode == "PUT":
+            self.sm.put(self.pixels, cut)
+            time.sleep(self.delay)
+
+        else:
+            raise ValueError("Invalid transfer mode: {}".format(self.transfer_mode))
+
 
     def fill(self, rgb_w, how_bright=None):
         """
@@ -373,3 +420,4 @@ class Neopixel:
         :return: None
         """
         self.pixels = array.array("I", [0] * self.num_leds)
+
